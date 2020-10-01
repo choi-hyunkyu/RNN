@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 '''
 랜덤시드 고정
 '''
@@ -28,7 +30,7 @@ char_dic = {c: i for i, c in enumerate(char_set)}
 '''
 dic_size = len(char_dic)
 hidden_size = len(char_dic)
-sequence_length = 10 #임의의 숫자
+sequence_length = 10 # sequence length = window size
 learning_rate = 0.1
 
 '''
@@ -39,7 +41,7 @@ y_data = []
 
 for i in range(0, len(sentence) - sequence_length):
     x_str = sentence[i : i + sequence_length]
-    y_str = sentence[i + 1 : i + sequence_length + 1]
+    y_str = sentence[i + 1 : i + sequence_length + 1] # x데이터와 길이 1이 차이나는 만큼 y데이터
     print("{} {} {}".format(i, x_str, y_str))
     x_data.append([char_dic[c] for c in x_str])
     y_data.append([char_dic[c] for c in y_str])
@@ -48,14 +50,16 @@ x_one_hot = [np.eye(dic_size)[x] for x in x_data]
 
 x_train = torch.FloatTensor(x_one_hot)
 y_train = torch.LongTensor(y_data)
+x_train.shape
+y_train.shape
 
 '''
 모델 설계
 '''
 class Net(nn.Module):
-    def __init__(self, input_dim, hidden_dim, layers):
+    def __init__(self, input_dim, hidden_dim, num_layers):
         super(Net, self).__init__()
-        self.rnn = nn.RNN(input_dim, hidden_dim, num_layers = layers)
+        self.rnn = nn.RNN(input_dim, hidden_dim, num_layers = num_layers)
         self.fc = nn.Linear(hidden_dim, hidden_dim, bias = True)
 
     def forward(self, x):
@@ -63,8 +67,8 @@ class Net(nn.Module):
         x = self.fc(x)
         return x
 
-model = Net(dic_size, hidden_size, 2)
-criterion = nn.CrossEntropyLoss()
+model = Net(dic_size, hidden_size, 2).to(device)
+criterion = nn.CrossEntropyLoss().to(device)
 optimizer = optim.Adam(model.parameters(), lr = learning_rate)
 
 '''
@@ -72,6 +76,8 @@ optimizer = optim.Adam(model.parameters(), lr = learning_rate)
 '''
 nb_epochs = 50
 for epoch in range(nb_epochs):
+    x_train = x_train.to(device)
+    y_train = y_train.to(device)
     optimizer.zero_grad()
     hypothesis = model(x_train)
     loss = criterion(hypothesis.view(-1, dic_size), y_train.view(-1))
