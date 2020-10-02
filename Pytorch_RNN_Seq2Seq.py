@@ -5,14 +5,19 @@ import torch.optim as optim
 import random
 
 torch.manual_seed(777)
-
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+'''
+데이터 선언
+'''
 raw = ["I feel hungry.	나는 배가 고프다.",
        "Pytorch is very easy.	파이토치는 매우 쉽다.",
        "Pytorch is a framework for deep learning.	파이토치는 딥러닝을 위한 프레임워크이다.",
        "Pytorch is very clear to use.	파이토치는 사용하기 매우 직관적이다."]
 
+'''
+Start Of Sentence, End Of Sentence 정의
+'''
 SOS_token = 0
 EOS_token = 1
 
@@ -33,6 +38,9 @@ class Vocab:
             else:
                 self.vocab_count[word] += 1
 
+'''
+전처리함수 선언
+'''
 def filter_pair(pair, source_max_length, target_max_length):
     return len(pair[0].split(" ")) < source_max_length and len(pair[1].split(" ")) < target_max_length
 
@@ -58,11 +66,14 @@ def preprocess(corpus, source_max_length, target_max_length):
 
     return pairs, source_vocab, target_vocab
 
+'''
+Encoder, Decoder 선언
+'''
 class Encoder(nn.Module):
     def __init__(self, input_size, hidden_size):
         super(Encoder, self).__init__()
         self.hidden_size = hidden_size
-        self.embedding = nn.Embedding(input_size, hidden_size)
+        self.embedding = nn.Embedding(input_size, hidden_size) # 단어의 개수의 차원을 가진 원핫인코딩 후 hidden size 만큼의 차원으로 줄이는 과정 = 임베딩
         self.gru = nn.GRU(hidden_size, hidden_size)
 
     def forward(self, x, hidden):
@@ -87,12 +98,19 @@ class Decoder(nn.Module):
         
         return x, hidden
 
+'''
+보조함수 선언
+sentence -> onehot vector -> tensor
+'''
 def tensorize(vocab, sentence):
     indexes = [vocab.vocab2index[word] for word in sentence.split(" ")]
     indexes.append(vocab.vocab2index["<EOS>"])
     
     return torch.Tensor(indexes).long().to(device).view(-1, 1)
 
+'''
+훈련함수 선언
+'''
 def train(pairs, source_vocab, target_vocab, encoder, decoder, n_iter, print_every=1000, learning_rate=0.01):
     loss_total = 0
 
@@ -122,13 +140,20 @@ def train(pairs, source_vocab, target_vocab, encoder, decoder, n_iter, print_eve
         for enc_input in range(source_length):
             _, encoder_hidden = encoder(source_tensor[enc_input], encoder_hidden)
 
-        decoder_input = torch.Tensor([[SOS_token]]).long().to(device)
-        decoder_hidden = encoder_hidden # connect encoder output to decoder input
+        decoder_input = torch.Tensor([[SOS_token]]).long().to(device) # SOS token이 첫 입력
 
+        '''
+        encoder와 decoder의 연결부분
+        '''
+        decoder_hidden = encoder_hidden
+
+        '''
+        teacher forcing
+        '''
         for di in range(target_length):
             decoder_output, decoder_hidden = decoder(decoder_input, decoder_hidden)
             loss += criterion(decoder_output, target_tensor[di])
-            decoder_input = target_tensor[di]  # teacher forcing
+            decoder_input = target_tensor[di]  # teacher forcing을 진행하면 학습이 불안해질 수도 있기 때문에 랜덤 함수를 통해 학습을 하기도 함
 
         loss.backward()
 
@@ -143,6 +168,9 @@ def train(pairs, source_vocab, target_vocab, encoder, decoder, n_iter, print_eve
             loss_total = 0
             print("[{} - {}%] loss = {:05.4f}".format(epoch, epoch / n_iter * 100, loss_avg))
 
+'''
+평가함수 선언
+'''
 def evaluate(pairs, source_vocab, target_vocab, encoder, decoder, target_max_length):
     for pair in pairs:
         print(">", pair[0])
@@ -154,7 +182,7 @@ def evaluate(pairs, source_vocab, target_vocab, encoder, decoder, target_max_len
         for ei in range(source_length):
             _, encoder_hidden = encoder(source_tensor[ei], encoder_hidden)
 
-        decoder_input = torch.Tensor([[SOS_token]], device=device).long()
+        decoder_input = torch.Tensor([[SOS_token]]).long().to(device)
         decoder_hidden = encoder_hidden
         decoded_words = []
 
